@@ -80,6 +80,25 @@ td.int{color:var(--green)}
 .ans small{display:block;color:var(--muted);font-size:.8rem}
 .ans b{font-size:1.1rem;font-variant-numeric:tabular-nums}
 .ans.ok b{color:var(--green)}
+.save-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.ghost{height:52px;border:1.5px solid var(--line);border-radius:14px;background:#fff;font-weight:700;font-size:.98rem;color:var(--ink)}
+.ghost.blue{border-color:#c9d6fb;color:var(--blue);background:#f5f8ff}
+.namebox{margin-top:12px;display:flex;gap:8px}
+.namebox .box{flex:1;min-width:0;height:52px}
+.namebox button{flex:none;border:0;border-radius:14px;background:var(--blue);color:#fff;font-weight:700;padding:0 18px}
+.saved h2{text-align:left;margin-bottom:12px}
+.saved-list{display:flex;flex-direction:column;gap:10px}
+.item{border:1.5px solid #eceef2;border-radius:16px;padding:12px 14px;display:flex;gap:10px;align-items:center}
+.item .l{flex:1;min-width:0}
+.item .n{font-weight:700;overflow-wrap:anywhere}
+.item .s{font-size:.8rem;color:var(--muted);margin-top:2px;line-height:1.5}
+.item .s b{color:var(--blue)}
+.item button{flex:none;border:0;border-radius:10px;padding:9px 12px;font-weight:700;font-size:.85rem}
+.item .open{background:#eef3ff;color:var(--blue)}
+.item .del{background:#f3f4f6;color:var(--muted)}
+.item .del.sure{background:#fde8e1;color:var(--danger)}
+.empty{color:var(--muted);font-size:.9rem}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);transform:translateX(-50%);background:#1f2937;color:#fff;border-radius:14px;padding:12px 16px;font-size:.92rem;z-index:50;max-width:calc(100% - 32px);text-align:center}
 .foot{text-align:center;color:var(--faint);font-size:.78rem;line-height:1.6}
 </style>
 </head>
@@ -124,9 +143,23 @@ td.int{color:var(--green)}
       <div class="row"><div class="box"><span class="pre">₩</span><input id="target" inputmode="numeric" autocomplete="off" placeholder="예: 100,000,000" aria-label="목표 금액"></div><button type="button" id="goalGo">분석</button></div>
       <div class="answers" id="answers"></div>
     </div>
+
+    <div class="save-row">
+      <button class="ghost blue" type="button" id="saveBtn">💾 결과 저장</button>
+      <button class="ghost" type="button" id="shareBtn">📤 결과 보내기</button>
+    </div>
+    <div class="namebox" id="nameBox" hidden>
+      <div class="box"><input id="saveName" maxlength="40" autocomplete="off" aria-label="저장할 이름"></div>
+      <button type="button" id="saveOk">저장</button>
+    </div>
   </section>
 
-  <p class="foot">매달 말에 넣고, 이자는 달마다 원금에 더해진다고 보고 계산해요. 세금·수수료는 빼지 않은 금액이에요.<br>입력한 값은 이 휴대폰에만 저장돼요.</p>
+  <section class="card saved" id="savedCard" hidden>
+    <h2>📂 저장한 결과</h2>
+    <div class="saved-list" id="savedList"></div>
+  </section>
+
+  <p class="foot">매달 말에 넣고, 이자는 달마다 원금에 더해진다고 보고 계산해요. 세금·수수료는 빼지 않은 금액이에요.<br>입력한 값과 저장한 결과는 이 휴대폰에만 저장돼요.</p>
 </main>
 
 <script>
@@ -290,9 +323,86 @@ function analyze() {
   out.innerHTML = html.join("");
 }
 
+/* ---------- 결과 저장 · 불러오기 · 보내기 ---------- */
+const SAVED = "fv.saved.v1";
+const readSaved = () => { try { return JSON.parse(localStorage.getItem(SAVED) || "[]"); } catch (e) { return []; } };
+const writeSaved = list => { try { localStorage.setItem(SAVED, JSON.stringify(list)); return true; } catch (e) { return false; } };
+function toast(t) {
+  document.querySelector(".toast")?.remove();
+  const d = document.createElement("div"); d.className = "toast"; d.setAttribute("role", "status"); d.textContent = t;
+  document.body.appendChild(d); setTimeout(() => d.remove(), 2600);
+}
+const pct = r => `${+(r * 100).toFixed(4)}%`;
+const defaultName = () => `월 ${korean(cur.M).replace(" 원", "")} · ${periodText(cur.n)} · 월 ${pct(cur.r)}`;
+$("#saveBtn").onclick = () => {
+  if (!cur) return;
+  const box = $("#nameBox"); box.hidden = !box.hidden;
+  if (!box.hidden) { $("#saveName").value = defaultName(); $("#saveName").select(); }
+};
+$("#saveName").addEventListener("keydown", e => { if (e.key === "Enter") $("#saveOk").click(); });
+$("#saveOk").onclick = () => {
+  const { M, r, n, P } = cur, fv = valueAt(P, M, r, n), target = $("#goal").hidden ? 0 : num($("#target"));
+  const item = { id: Date.now(), name: $("#saveName").value.trim() || defaultName(), savedAt: new Date().toISOString(), M, r, n, P, target, fv };
+  const list = readSaved(); list.unshift(item);
+  if (!writeSaved(list)) { toast("저장에 실패했어요"); return; }
+  $("#nameBox").hidden = true; drawSaved();
+  toast(target ? "계산 결과와 목표 분석을 저장했어요" : "계산 결과를 저장했어요");
+};
+/** 저장해 둔 입력값으로 다시 계산해 보여 준다(같은 입력이면 결과도 같다) */
+function openSaved(it) {
+  $("#monthly").value = it.M ? it.M.toLocaleString("ko-KR") : "";
+  $("#rate").value = +(it.r * 100).toFixed(6);
+  $("#months").value = it.n; $("#months").dispatchEvent(new Event("input"));
+  $("#initial").value = (it.P || 0).toLocaleString("ko-KR");
+  $("#target").value = it.target ? it.target.toLocaleString("ko-KR") : "";
+  $("#goal").hidden = !it.target;
+  $("#form").requestSubmit();
+  if (it.target) analyze();
+  toast(`‘${it.name}’을 불러왔어요`);
+}
+function drawSaved() {
+  const list = readSaved();
+  $("#savedCard").hidden = !list.length;
+  $("#savedList").innerHTML = list.map(it => {
+    const d = new Date(it.savedAt);
+    return `<div class="item" data-id="${it.id}"><div class="l"><div class="n"></div>
+      <div class="s">${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} 저장 · 미래가치 <b>${won(it.fv)}</b>${it.target ? ` · 목표 ${korean(it.target)}` : ""}</div></div>
+      <button type="button" class="open">보기</button><button type="button" class="del">삭제</button></div>`;
+  }).join("");
+  $("#savedList").querySelectorAll(".item").forEach((el, k) => { el.querySelector(".n").textContent = list[k].name; });
+}
+$("#savedList").addEventListener("click", e => {
+  const el = e.target.closest(".item"); if (!el) return;
+  const id = +el.dataset.id, list = readSaved(), it = list.find(x => x.id === id); if (!it) return;
+  if (e.target.classList.contains("open")) openSaved(it);
+  if (e.target.classList.contains("del")) {
+    if (!e.target.classList.contains("sure")) { e.target.classList.add("sure"); e.target.textContent = "정말 삭제"; return; }   // 한 번 더 눌러야 지운다
+    writeSaved(list.filter(x => x.id !== id)); drawSaved(); toast("삭제했어요");
+  }
+});
+/** 결과와 목표 분석을 글로 정리해 카톡·메모 등으로 보낸다 */
+$("#shareBtn").onclick = async () => {
+  if (!cur) return;
+  const { M, r, n, P } = cur, fv = valueAt(P, M, r, n), principal = P + M * n;
+  const lines = [
+    "💰 미래가치 계산 결과",
+    `· 매월 불입금액: ${won(M)}`, `· 월 복리 이자율: ${pct(r)} (연 약 ${((Math.pow(1 + r, 12) - 1) * 100).toFixed(1)}%)`,
+    `· 투자 기간: ${n}개월 (${periodText(n)})`, `· 초기 투자금: ${won(P)}`, "",
+    `▶ 예상 미래가치: ${won(fv)} (약 ${korean(fv)})`, `· 총 원금: ${won(principal)}`, `· 총 이자: ${won(fv - principal)}`,
+  ];
+  const answers = [...$("#answers").querySelectorAll(".ans")].map(a => "· " + a.innerText.replace(/\s*\n\s*/g, " ").trim());
+  if (!$("#goal").hidden && answers.length) lines.push("", `🎯 목표 분석 (목표 ${won(num($("#target")))})`, ...answers);
+  lines.push("", "※ 매달 말 납입·월 복리 기준, 세금·수수료 제외");
+  const text = lines.join("\n");
+  if (navigator.share) { try { await navigator.share({ title: "미래가치 계산 결과", text }); return; } catch (e) { if (e.name === "AbortError") return; } }
+  try { await navigator.clipboard.writeText(text); toast("결과를 복사했어요. 카톡이나 메모에 붙여 넣으세요"); }
+  catch (e) { toast("이 휴대폰에서는 보내기를 쓸 수 없어요. 화면을 캡처해 주세요"); }
+};
+
 /* ---------- 시작 ---------- */
 if (loadInputs()) $("#form").requestSubmit ? $("#form").requestSubmit() : $("#form").dispatchEvent(new Event("submit"));
 window.scrollTo(0, 0);
+drawSaved();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
