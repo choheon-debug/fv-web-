@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light only">
+<title>미래가치 계산기</title>
+<meta name="description" content="매달 넣는 돈이 복리로 얼마가 되는지 계산해 주는 미래가치 계산기">
+<meta name="theme-color" content="#F1F3F7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="미래가치">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* 보내 주신 화면처럼: 옅은 회색 바탕에 흰 카드, 파란 계산 버튼, 원금은 파랑·이자는 초록 */
+:root{
+  --bg:#f1f3f7; --card:#fff; --ink:#1f2937; --muted:#6b7280; --faint:#9ca3af; --line:#d9dde4; --soft:#f6f7f9;
+  --blue:#3563e9; --blue-bar:#7fa3f2; --green:#3a9a50; --green-bar:#74bb84; --purple:linear-gradient(110deg,#7c3aed,#4338ca);
+  --danger:#c2410c;
+  --shadow:0 10px 30px rgb(31 41 55 / .08);
+  --body:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-text-size-adjust:100%}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+[hidden]{display:none!important}
+.wrap{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 20px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 32px) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border-radius:24px;box-shadow:var(--shadow);padding:28px 18px;min-width:0}
+h1{margin:0;text-align:center;font-size:clamp(1.8rem,8vw,2.3rem);font-weight:800;letter-spacing:-.02em}
+.sub{margin:8px 0 22px;text-align:center;color:var(--muted);line-height:1.5;text-wrap:balance}
+.field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.field label{font-weight:700;font-size:1rem}
+.box{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:14px;padding:0 16px;height:56px;background:var(--card)}
+.box:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px rgb(53 99 233 / .15)}
+.box .pre,.box .suf{color:var(--faint);font-size:1.1rem;flex:none}
+.box input{flex:1;min-width:0;border:0;outline:none;background:none;font-size:1.15rem;font-variant-numeric:tabular-nums}
+.box input::placeholder{color:var(--faint)}
+.field .help{font-size:.8rem;color:var(--muted);margin:-2px 2px 0}
+.err{color:var(--danger);font-size:.88rem;margin:-6px 2px 12px}
+.calc{width:100%;height:56px;border:0;border-radius:14px;background:var(--blue);color:#fff;font-weight:800;font-size:1.15rem;margin-top:6px;box-shadow:0 8px 18px rgb(53 99 233 / .3)}
+
+.result{text-align:center}
+.result .label{font-size:1.15rem;color:#4b5563}
+.big{display:block;font-size:clamp(2rem,10.5vw,3.1rem);font-weight:800;color:var(--blue);letter-spacing:-.02em;margin:6px 0 2px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.korean{color:var(--muted);font-size:.95rem}
+.split{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:1rem;color:var(--muted)}
+.split b{color:var(--ink);font-variant-numeric:tabular-nums}
+.split .int b{color:var(--green)}
+.rate-note{margin-top:10px;font-size:.85rem;color:var(--muted);background:var(--soft);border-radius:12px;padding:9px 12px;line-height:1.5}
+.rate-note.warn{color:var(--danger);background:#fff3ec}
+hr{border:0;border-top:1.5px solid #eceef2;margin:22px 0}
+h2{margin:0 0 8px;text-align:center;font-size:1.15rem;color:#4b5563}
+.legend{display:flex;justify-content:center;gap:18px;font-size:.9rem;color:var(--muted);margin-bottom:6px}
+.legend i{display:inline-block;width:30px;height:12px;border-radius:2px;vertical-align:-1px;margin-right:6px}
+.chart{width:100%;height:auto;display:block}
+.chart text{font-family:var(--body);fill:#6b7280;font-size:11px}
+.table-wrap{overflow-x:auto;margin-top:12px;border-radius:14px;border:1px solid #eceef2}
+table{width:100%;border-collapse:collapse;font-size:.8rem;font-variant-numeric:tabular-nums}
+th,td{padding:9px 7px;text-align:right;white-space:nowrap;border-bottom:1px solid #f0f1f4}
+th{background:var(--soft);color:var(--muted);font-weight:600}
+td:first-child,th:first-child{text-align:left}
+tr:last-child td{border-bottom:0;font-weight:700}
+td.int{color:var(--green)}
+@media (max-width:380px){.card{padding:24px 14px}table{font-size:.74rem}th,td{padding:8px 5px}}
+
+.goal-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:340px;margin:22px auto 0;height:58px;border:0;border-radius:16px;background:var(--purple);color:#fff;font-weight:800;font-size:1.15rem;box-shadow:0 8px 20px rgb(91 33 182 / .3)}
+.goal{margin-top:18px;border:1.5px solid #e6e1fb;border-radius:18px;padding:18px 16px;background:#faf9ff}
+.goal h3{margin:0 0 12px;font-size:1.05rem}
+.goal .row{display:flex;gap:8px}
+.goal .row .box{flex:1;min-width:0;height:52px}
+.goal .row button{flex:none;border:0;border-radius:14px;background:#5b3fd6;color:#fff;font-weight:700;padding:0 18px}
+.answers{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.ans{background:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 2px 8px rgb(31 41 55 / .05);line-height:1.55}
+.ans small{display:block;color:var(--muted);font-size:.8rem}
+.ans b{font-size:1.1rem;font-variant-numeric:tabular-nums}
+.ans.ok b{color:var(--green)}
+.foot{text-align:center;color:var(--faint);font-size:.78rem;line-height:1.6}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="card" aria-labelledby="title">
+    <h1 id="title">미래가치 계산기</h1>
+    <p class="sub">정기적인 투자가 미래에 얼마나 큰 자산이 되는지 확인해보세요.</p>
+    <form id="form" novalidate>
+      <div class="field"><label for="monthly">매월 불입금액</label>
+        <div class="box"><span class="pre">₩</span><input id="monthly" inputmode="numeric" autocomplete="off" placeholder="예: 300,000"></div></div>
+      <div class="field"><label for="rate">월 복리 이자율</label>
+        <div class="box"><input id="rate" inputmode="decimal" autocomplete="off" placeholder="예: 0.4"><span class="suf">%</span></div>
+        <p class="help" id="rateHelp">연 이자율을 알면 12로 나눠 넣으세요. 예: 연 4.8% → 월 0.4%</p></div>
+      <div class="field"><label for="months">투자 기간</label>
+        <div class="box"><input id="months" inputmode="numeric" autocomplete="off" placeholder="예: 120"><span class="suf">개월</span></div>
+        <p class="help" id="monthsHelp"></p></div>
+      <div class="field"><label for="initial">초기 투자금 (선택)</label>
+        <div class="box"><span class="pre">₩</span><input id="initial" inputmode="numeric" autocomplete="off" value="0"></div></div>
+      <p class="err" id="err" hidden></p>
+      <button class="calc" type="submit">계산하기</button>
+    </form>
+  </section>
+
+  <section class="card" id="resultCard" hidden aria-live="polite">
+    <div class="result">
+      <span class="label">예상 미래가치</span>
+      <span class="big" id="fv"></span>
+      <span class="korean" id="fvKo"></span>
+      <div class="split"><span>총 원금: <b id="principal"></b></span><span class="int">총 이자: <b id="interest"></b></span></div>
+      <p class="rate-note" id="rateNote"></p>
+    </div>
+    <hr>
+    <h2>연도별 자산 성장 시각화</h2>
+    <div class="legend"><span><i style="background:var(--blue-bar)"></i>총 원금</span><span><i style="background:var(--green-bar)"></i>총 이자</span></div>
+    <svg class="chart" id="chart" role="img" aria-label="연도별 원금과 이자 막대그래프"></svg>
+    <div class="table-wrap"><table><thead><tr><th>기간</th><th>원금(원)</th><th>이자(원)</th><th>평가액(원)</th></tr></thead><tbody id="rows"></tbody></table></div>
+
+    <button class="goal-btn" type="button" id="goalBtn">✨ 목표 분석</button>
+    <div class="goal" id="goal" hidden>
+      <h3>목표 금액을 정하면, 이루는 방법을 계산해 드려요</h3>
+      <div class="row"><div class="box"><span class="pre">₩</span><input id="target" inputmode="numeric" autocomplete="off" placeholder="예: 100,000,000" aria-label="목표 금액"></div><button type="button" id="goalGo">분석</button></div>
+      <div class="answers" id="answers"></div>
+    </div>
+  </section>
+
+  <p class="foot">매달 말에 넣고, 이자는 달마다 원금에 더해진다고 보고 계산해요. 세금·수수료는 빼지 않은 금액이에요.<br>입력한 값은 이 휴대폰에만 저장돼요.</p>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const KEY = "fv.v1";
+const plain = n => Math.round(n).toLocaleString("ko-KR");
+const won = n => "₩" + plain(n);
+/** 1억 2,345만 원처럼 읽기 쉽게 */
+function korean(n) {
+  n = Math.round(n);
+  if (n < 10000) return `${n.toLocaleString("ko-KR")}원`;
+  const jo = Math.floor(n / 1e12), eok = Math.floor(n % 1e12 / 1e8), man = Math.floor(n % 1e8 / 1e4);
+  return [jo && `${jo.toLocaleString("ko-KR")}조`, eok && `${eok.toLocaleString("ko-KR")}억`, man && `${man.toLocaleString("ko-KR")}만`].filter(Boolean).join(" ") + " 원";
+}
+const num = el => Number(String(el.value).replace(/[^\d.]/g, "")) || 0;
+const periodText = m => { const y = Math.floor(m / 12), r = m % 12; return y ? `${y}년${r ? ` ${r}개월` : ""}` : `${r}개월`; };
+
+/* ---------- 계산: 매달 말 납입, 월 복리 ---------- */
+/** m개월 뒤 평가금액 */
+function valueAt(P, M, r, m) {
+  if (r === 0) return P + M * m;
+  const g = Math.pow(1 + r, m);
+  return P * g + M * (g - 1) / r;
+}
+
+/* ---------- 입력: 숫자에 쉼표 넣기, 마지막 값 기억 ---------- */
+for (const id of ["monthly", "initial", "target"]) {
+  $("#" + id).addEventListener("input", e => {
+    const el = e.target, digits = el.value.replace(/\D/g, "");
+    el.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
+  });
+}
+$("#rate").addEventListener("input", e => { e.target.value = e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"); });
+$("#months").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4);
+  const m = Number(e.target.value);
+  $("#monthsHelp").textContent = m ? `= ${periodText(m)}` : "";
+});
+function saveInputs() {
+  try { localStorage.setItem(KEY, JSON.stringify({ monthly: $("#monthly").value, rate: $("#rate").value, months: $("#months").value, initial: $("#initial").value, target: $("#target").value })); } catch (e) {}
+}
+function loadInputs() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (!v) return false;
+    for (const k of ["monthly", "rate", "months", "initial", "target"]) if (v[k] != null) $("#" + k).value = v[k];
+    $("#months").dispatchEvent(new Event("input"));
+    return !!v.months;
+  } catch (e) { return false; }
+}
+
+/* ---------- 계산하기 ---------- */
+let cur = null;
+$("#form").addEventListener("submit", e => {
+  e.preventDefault();
+  const M = num($("#monthly")), r = num($("#rate")) / 100, n = Math.round(num($("#months"))), P = num($("#initial"));
+  const msg = !n ? "투자 기간(개월)을 입력해 주세요." : n > 1200 ? "투자 기간은 1200개월(100년)까지 계산할 수 있어요."
+    : !M && !P ? "매월 불입금액이나 초기 투자금을 입력해 주세요." : r > 0.2 ? "월 이자율이 너무 커요. 20% 이하로 입력해 주세요." : "";
+  $("#err").hidden = !msg; $("#err").textContent = msg;
+  if (msg) return;
+  saveInputs();
+  cur = { M, r, n, P };
+  show(); $("#resultCard").hidden = false;
+  $("#resultCard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+});
+
+function show() {
+  const { M, r, n, P } = cur;
+  const fv = valueAt(P, M, r, n), principal = P + M * n;
+  $("#fv").textContent = won(fv);
+  $("#fvKo").textContent = `약 ${korean(fv)} · ${periodText(n)} 뒤`;
+  $("#principal").textContent = won(principal);
+  $("#interest").textContent = won(fv - principal);
+  // 월 이자율을 연 이자율로 바꿔 보여 주어, 너무 큰 이자율을 넣었는지 알아차리게 한다
+  const yearly = (Math.pow(1 + r, 12) - 1) * 100;
+  const note = $("#rateNote");
+  note.textContent = r ? `월 ${+(r * 100).toFixed(4)}%는 연 약 ${yearly.toFixed(1)}%(복리)예요.${yearly > 30 ? " 연 이자율을 월 칸에 넣지 않았는지 확인해 보세요." : ""}` : "이자 없이 모은 금액이에요.";
+  note.classList.toggle("warn", yearly > 30);
+
+  // 연도별(마지막이 딱 맞지 않으면 그 달까지) 원금·이자
+  const points = [];
+  for (let m = 0; m < n; m += 12) points.push(m);
+  points.push(n);
+  const data = points.map(m => { const p = P + M * m, v = valueAt(P, M, r, m); return { m, p, i: v - p, v }; });
+  drawChart(data);
+  $("#rows").innerHTML = data.slice(1).map(d => `<tr><td>${periodText(d.m)}</td><td>${plain(d.p)}</td><td class="int">${plain(d.i)}</td><td>${plain(d.v)}</td></tr>`).join("");
+  if ($("#goal").hidden === false && num($("#target"))) analyze();
+}
+
+/* ---------- 막대그래프 (원금 위에 이자를 쌓아서) ---------- */
+/** 눈금 간격을 1·2·2.5·5 단위의 보기 좋은 수로 */
+function niceStep(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+}
+function axisLabel(v) {
+  if (v === 0) return "₩0";
+  if (v >= 1e8 && v % 1e8 === 0) return `₩${(v / 1e8).toLocaleString("ko-KR")}억`;
+  if (v >= 1e6) return `₩${(v / 1e6).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}백만`;
+  if (v >= 1e4) return `₩${(v / 1e4).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만`;
+  return `₩${v.toLocaleString("ko-KR")}`;
+}
+function drawChart(data) {
+  // 막대가 너무 많으면(긴 기간) 골고루 골라서 최대 12개만 그린다. 마지막은 늘 포함.
+  let bars = data;
+  if (data.length > 12) { const step = Math.ceil((data.length - 1) / 11); bars = data.filter((d, k) => k % step === 0 || k === data.length - 1); }
+  const top = Math.max(...bars.map(d => d.v), 1), step = niceStep(top / 5), ticks = Math.ceil(top / step), max = step * ticks;
+  const W = 340, H = 240, L = 62, R = 8, T = 10, B = 26;
+  const y = v => T + (H - T - B) * (1 - v / max), slot = (W - L - R) / bars.length, bw = Math.min(46, slot * .72);
+  let s = "";
+  for (let k = 0; k <= ticks; k++) {
+    const v = step * k, yy = y(v);
+    s += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#e8eaee"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end">${axisLabel(v)}</text>`;
+  }
+  s += `<line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="#e1e4e9"/>`;
+  bars.forEach((d, k) => {
+    const x = L + slot * k + (slot - bw) / 2, yp = y(Math.max(0, d.p)), yv = y(Math.max(d.v, d.p));
+    s += `<rect x="${x}" y="${yp}" width="${bw}" height="${Math.max(0, H - B - yp)}" fill="var(--blue-bar)"><title>${periodText(d.m)} 원금 ${won(d.p)}</title></rect>`;
+    if (d.i > 0) s += `<rect x="${x}" y="${yv}" width="${bw}" height="${Math.max(0, yp - yv)}" fill="var(--green-bar)"><title>${periodText(d.m)} 이자 ${won(d.i)}</title></rect>`;
+    const lab = d.m % 12 === 0 ? `${d.m / 12}년` : periodText(d.m);
+    s += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${lab}</text>`;
+  });
+  const svg = $("#chart");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = s;
+}
+
+/* ---------- 목표 분석: 기간 · 월 납입액 · 이자율 ---------- */
+$("#goalBtn").onclick = () => { $("#goal").hidden = !$("#goal").hidden; if (!$("#goal").hidden) $("#target").focus(); };
+$("#goalGo").onclick = analyze;
+$("#target").addEventListener("keydown", e => { if (e.key === "Enter") analyze(); });
+function analyze() {
+  const goal = num($("#target")), out = $("#answers");
+  if (!cur) return;
+  if (!goal) { out.innerHTML = `<div class="ans">목표 금액을 입력해 주세요.</div>`; return; }
+  saveInputs();
+  const { M, r, n, P } = cur, fv = valueAt(P, M, r, n), html = [];
+  if (fv >= goal) html.push(`<div class="ans ok"><small>지금 계획대로라면</small><b>목표를 이뤄요! 🎉</b><br>${periodText(n)} 뒤 ${won(fv)}으로, 목표보다 ${won(fv - goal)} 더 많아요.</div>`);
+  else html.push(`<div class="ans"><small>지금 계획대로라면</small>${periodText(n)} 뒤 <b>${won(fv)}</b> · 목표까지 ${won(goal - fv)} 모자라요.</div>`);
+
+  // 1) 지금 조건으로 몇 달 걸리나
+  let m = 0;
+  if (M > 0 || (P > 0 && r > 0)) { while (valueAt(P, M, r, m) < goal && m < 1200) m++; }
+  html.push(`<div class="ans"><small>매월 ${won(M)}씩, 같은 이자율이면</small>${m && m < 1200 ? `<b>${periodText(m)}</b> 걸려요.` : "100년 안에는 어려워요."}</div>`);
+
+  // 2) 기간을 그대로 두면 매달 얼마씩
+  const g = r ? (Math.pow(1 + r, n) - 1) / r : n, need = Math.max(0, (goal - P * Math.pow(1 + r, n)) / g);
+  html.push(`<div class="ans"><small>${periodText(n)} 안에 이루려면</small>매월 <b>${won(Math.ceil(need / 1000) * 1000)}</b>씩 넣어야 해요.${M ? ` (지금보다 ${need > M ? won(Math.ceil((need - M) / 1000) * 1000) + " 더" : "덜 넣어도 돼요"})` : ""}</div>`);
+
+  // 3) 금액·기간을 그대로 두면 이자율이 얼마여야 하나 (반씩 좁혀 찾기)
+  if (P + M * n >= goal) html.push(`<div class="ans"><small>매월 ${won(M)} · ${periodText(n)} 그대로라면</small>이자가 없어도 목표에 닿아요.</div>`);
+  else if (M > 0 || P > 0) {
+    let lo = 0, hi = 0.2;
+    if (valueAt(P, M, hi, n) < goal) html.push(`<div class="ans"><small>매월 ${won(M)} · ${periodText(n)} 그대로라면</small>월 20%로도 어려워요.</div>`);
+    else {
+      for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2; if (valueAt(P, M, mid, n) < goal) lo = mid; else hi = mid; }
+      html.push(`<div class="ans"><small>매월 ${won(M)} · ${periodText(n)} 그대로라면</small>월 <b>${(hi * 100).toFixed(3)}%</b> (연 약 ${((Math.pow(1 + hi, 12) - 1) * 100).toFixed(1)}%)의 이자율이 필요해요.</div>`);
+    }
+  }
+  out.innerHTML = html.join("");
+}
+
+/* ---------- 시작 ---------- */
+if (loadInputs()) $("#form").requestSubmit ? $("#form").requestSubmit() : $("#form").dispatchEvent(new Event("submit"));
+window.scrollTo(0, 0);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
