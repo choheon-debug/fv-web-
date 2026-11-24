@@ -41,6 +41,9 @@ h1{margin:0;text-align:center;font-size:clamp(1.8rem,8vw,2.3rem);font-weight:800
 .box .pre,.box .suf{color:var(--faint);font-size:1.1rem;flex:none}
 .box input{flex:1;min-width:0;border:0;outline:none;background:none;font-size:1.15rem;font-variant-numeric:tabular-nums}
 .box input::placeholder{color:var(--faint)}
+.when{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--soft);border-radius:14px;padding:4px}
+.when button{border:0;border-radius:11px;padding:11px 6px;font:inherit;font-weight:700;font-size:.92rem;background:transparent;color:var(--muted)}
+.when button.on{background:var(--card);color:var(--ink,#1f2937);box-shadow:0 1px 4px rgb(0 0 0 / .12)}
 .field .help{font-size:.8rem;color:var(--muted);margin:-2px 2px 0}
 .err{color:var(--danger);font-size:.88rem;margin:-6px 2px 12px}
 .calc{width:100%;height:56px;border:0;border-radius:14px;background:var(--blue);color:#fff;font-weight:800;font-size:1.15rem;margin-top:6px;box-shadow:0 8px 18px rgb(53 99 233 / .3)}
@@ -116,6 +119,9 @@ td.int{color:var(--green)}
       <div class="field"><label for="months">투자 기간</label>
         <div class="box"><input id="months" inputmode="numeric" autocomplete="off" placeholder="예: 120"><span class="suf">개월</span></div>
         <p class="help" id="monthsHelp"></p></div>
+      <div class="field"><label>매월 넣는 날</label>
+        <div class="when" role="radiogroup"><button type="button" data-due="1" role="radio">월초 (달 시작에 넣기)</button><button type="button" data-due="0" role="radio">월말 (달 끝에 넣기)</button></div>
+        <p class="help" id="dueHelp"></p></div>
       <div class="field"><label for="initial">초기 투자금 (선택)</label>
         <div class="box"><span class="pre">₩</span><input id="initial" inputmode="numeric" autocomplete="off" value="0"></div></div>
       <p class="err" id="err" hidden></p>
@@ -159,7 +165,7 @@ td.int{color:var(--green)}
     <div class="saved-list" id="savedList"></div>
   </section>
 
-  <p class="foot">매달 말에 넣고, 이자는 달마다 원금에 더해진다고 보고 계산해요. 세금·수수료는 빼지 않은 금액이에요.<br>입력한 값과 저장한 결과는 이 휴대폰에만 저장돼요.</p>
+  <p class="foot">위에서 고른 날(월초·월말)에 넣고, 이자는 달마다 원금에 더해진다고 보고 계산해요. 세금·수수료는 빼지 않은 금액이에요.<br>입력한 값과 저장한 결과는 이 휴대폰에만 저장돼요.</p>
 </main>
 
 <script>
@@ -178,12 +184,18 @@ function korean(n) {
 const num = el => Number(String(el.value).replace(/[^\d.]/g, "")) || 0;
 const periodText = m => { const y = Math.floor(m / 12), r = m % 12; return y ? `${y}년${r ? ` ${r}개월` : ""}` : `${r}개월`; };
 
-/* ---------- 계산: 매달 말 납입, 월 복리 ---------- */
+/* ---------- 계산: 월 복리, 납입은 월초(기본) 또는 월말 ---------- */
+let due = true;   // true = 월초에 넣어 그달 이자까지 받음, false = 월말에 넣음
 /** m개월 뒤 평가금액 */
 function valueAt(P, M, r, m) {
   if (r === 0) return P + M * m;
   const g = Math.pow(1 + r, m);
-  return P * g + M * (g - 1) / r;
+  return P * g + M * (g - 1) / r * (due ? 1 + r : 1);
+}
+function setDue(v) {
+  due = !!v;
+  document.querySelectorAll("[data-due]").forEach(b => { const on = +b.dataset.due === +due; b.classList.toggle("on", on); b.setAttribute("aria-checked", on); });
+  $("#dueHelp").textContent = due ? "매달 1일에 넣어 그달 이자도 받아요. 적금·적립식 투자는 보통 월초예요." : "매달 말일에 넣어 넣은 달에는 이자가 붙지 않아요.";
 }
 
 /* ---------- 입력: 숫자에 쉼표 넣기, 마지막 값 기억 ---------- */
@@ -199,13 +211,15 @@ $("#months").addEventListener("input", e => {
   const m = Number(e.target.value);
   $("#monthsHelp").textContent = m ? `= ${periodText(m)}` : "";
 });
+document.querySelectorAll("[data-due]").forEach(b => b.addEventListener("click", () => { setDue(+b.dataset.due); saveInputs(); if (cur) { cur.due = due; show(); if (!$("#goal").hidden) analyze(); } }));
 function saveInputs() {
-  try { localStorage.setItem(KEY, JSON.stringify({ monthly: $("#monthly").value, rate: $("#rate").value, months: $("#months").value, initial: $("#initial").value, target: $("#target").value })); } catch (e) {}
+  try { localStorage.setItem(KEY, JSON.stringify({ due: due ? 1 : 0, monthly: $("#monthly").value, rate: $("#rate").value, months: $("#months").value, initial: $("#initial").value, target: $("#target").value })); } catch (e) {}
 }
 function loadInputs() {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || "null");
     if (!v) return false;
+    if (v.due != null) setDue(v.due);
     for (const k of ["monthly", "rate", "months", "initial", "target"]) if (v[k] != null) $("#" + k).value = v[k];
     $("#months").dispatchEvent(new Event("input"));
     return !!v.months;
@@ -222,7 +236,7 @@ $("#form").addEventListener("submit", e => {
   $("#err").hidden = !msg; $("#err").textContent = msg;
   if (msg) return;
   saveInputs();
-  cur = { M, r, n, P };
+  cur = { M, r, n, P, due };
   show(); $("#resultCard").hidden = false;
   $("#resultCard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 });
@@ -307,7 +321,7 @@ function analyze() {
   html.push(`<div class="ans"><small>매월 ${won(M)}씩, 같은 이자율이면</small>${m && m < 1200 ? `<b>${periodText(m)}</b> 걸려요.` : "100년 안에는 어려워요."}</div>`);
 
   // 2) 기간을 그대로 두면 매달 얼마씩
-  const g = r ? (Math.pow(1 + r, n) - 1) / r : n, need = Math.max(0, (goal - P * Math.pow(1 + r, n)) / g);
+  const g = (r ? (Math.pow(1 + r, n) - 1) / r : n) * (due ? 1 + r : 1), need = Math.max(0, (goal - P * Math.pow(1 + r, n)) / g);
   html.push(`<div class="ans"><small>${periodText(n)} 안에 이루려면</small>매월 <b>${won(Math.ceil(need / 1000) * 1000)}</b>씩 넣어야 해요.${M ? ` (지금보다 ${need > M ? won(Math.ceil((need - M) / 1000) * 1000) + " 더" : "덜 넣어도 돼요"})` : ""}</div>`);
 
   // 3) 금액·기간을 그대로 두면 이자율이 얼마여야 하나 (반씩 좁혀 찾기)
@@ -342,7 +356,7 @@ $("#saveBtn").onclick = () => {
 $("#saveName").addEventListener("keydown", e => { if (e.key === "Enter") $("#saveOk").click(); });
 $("#saveOk").onclick = () => {
   const { M, r, n, P } = cur, fv = valueAt(P, M, r, n), target = $("#goal").hidden ? 0 : num($("#target"));
-  const item = { id: Date.now(), name: $("#saveName").value.trim() || defaultName(), savedAt: new Date().toISOString(), M, r, n, P, target, fv };
+  const item = { id: Date.now(), name: $("#saveName").value.trim() || defaultName(), savedAt: new Date().toISOString(), M, r, n, P, due, target, fv };
   const list = readSaved(); list.unshift(item);
   if (!writeSaved(list)) { toast("저장에 실패했어요"); return; }
   $("#nameBox").hidden = true; drawSaved();
@@ -352,6 +366,7 @@ $("#saveOk").onclick = () => {
 function openSaved(it) {
   $("#monthly").value = it.M ? it.M.toLocaleString("ko-KR") : "";
   $("#rate").value = +(it.r * 100).toFixed(6);
+  setDue(it.due ?? false);   // 예전에 저장한 결과는 월말 기준으로 계산했던 것
   $("#months").value = it.n; $("#months").dispatchEvent(new Event("input"));
   $("#initial").value = (it.P || 0).toLocaleString("ko-KR");
   $("#target").value = it.target ? it.target.toLocaleString("ko-KR") : "";
@@ -392,7 +407,7 @@ $("#shareBtn").onclick = async () => {
   ];
   const answers = [...$("#answers").querySelectorAll(".ans")].map(a => "· " + a.innerText.replace(/\s*\n\s*/g, " ").trim());
   if (!$("#goal").hidden && answers.length) lines.push("", `🎯 목표 분석 (목표 ${won(num($("#target")))})`, ...answers);
-  lines.push("", "※ 매달 말 납입·월 복리 기준, 세금·수수료 제외");
+  lines.push("", `※ 매달 ${due ? "초" : "말"} 납입·월 복리 기준, 세금·수수료 제외`);
   const text = lines.join("\n");
   if (navigator.share) { try { await navigator.share({ title: "미래가치 계산 결과", text }); return; } catch (e) { if (e.name === "AbortError") return; } }
   try { await navigator.clipboard.writeText(text); toast("결과를 복사했어요. 카톡이나 메모에 붙여 넣으세요"); }
@@ -400,6 +415,7 @@ $("#shareBtn").onclick = async () => {
 };
 
 /* ---------- 시작 ---------- */
+setDue(true);
 if (loadInputs()) $("#form").requestSubmit ? $("#form").requestSubmit() : $("#form").dispatchEvent(new Event("submit"));
 window.scrollTo(0, 0);
 drawSaved();
